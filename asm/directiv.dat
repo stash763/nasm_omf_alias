@@ -101,6 +101,7 @@ equ
 export				; outcoff, outobj
 group				; outobj
 import				; outobj
+alias				; outobj
 library				; outrdf2
 map				; outbin
 module				; outrdf2

@@ -15,5 +15,8 @@ OUT: obj obj2
 %imacro import 1+.nolist
 [import %1]
 %endmacro
+%imacro alias 1+.nolist
+[alias %1]
+%endmacro
 %macro __?NASM_CDecl?__ 1
 %endmacro

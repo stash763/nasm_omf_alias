@@ -113,7 +113,8 @@ enum RecordID {                 /* record ID codes */
     FIXU32 = 0x9D,              /* 32-bit fixups (relocations) */
 
     MODEND = 0x8A,              /* module end */
-    MODE32 = 0x8B               /* module end for 32-bit objects */
+    MODE32 = 0x8B,              /* module end for 32-bit objects */
+    ALIASDEF = 0xC6             /* alias definition record */
 };
 
 enum ComentID {                 /* ID codes for comment records */
@@ -598,6 +599,12 @@ static struct ExpDef {
     int flags;
 } *exphead, **exptail;
 
+static struct AliasDef {
+    struct AliasDef *next;
+    char *aliasname;
+    char *targetname;
+} *aliashead, **aliastail;
+
 #define EXPDEF_FLAG_ORDINAL  0x80
 #define EXPDEF_FLAG_RESIDENT 0x40
 #define EXPDEF_FLAG_NODATA   0x20
@@ -668,6 +675,8 @@ static void obj_init(void)
     imptail = &imphead;
     exphead = NULL;
     exptail = &exphead;
+    aliashead = NULL;
+    aliastail = &aliashead;
     dws = NULL;
     externals = 0;
     ebhead = NULL;
@@ -741,6 +750,13 @@ static void obj_cleanup(void)
         nasm_free(exptmp->extname);
         nasm_free(exptmp->intname);
         nasm_free(exptmp);
+    }
+    while (aliashead) {
+        struct AliasDef *aliastmp = aliashead;
+        aliashead = aliashead->next;
+        nasm_free(aliastmp->aliasname);
+        nasm_free(aliastmp->targetname);
+        nasm_free(aliastmp);
     }
     while (ebhead) {
         struct ExtBack *ebtmp = ebhead;
@@ -1917,6 +1933,29 @@ obj_directive(enum directive directive, char *value)
         }
         return DIRR_OK;
 
+    case D_ALIAS:
+        /* Format: alias_name=target_name */
+        if (value && pass_first()) {
+            char *p, *aliasname, *targetname;
+            struct AliasDef *aliasdef;
+
+            aliasname = value;
+            p = strchr(value, '=');
+            if (!p) {
+                nasm_nonfatal("`alias' directive requires alias=target");
+                return DIRR_ERROR;
+            }
+            *p = '\0';
+            targetname = p + 1;
+
+            aliasdef = *aliastail = nasm_malloc(sizeof(struct AliasDef));
+            aliastail = &aliasdef->next;
+            aliasdef->next = NULL;
+            aliasdef->aliasname = nasm_strdup(aliasname);
+            aliasdef->targetname = nasm_strdup(targetname);
+        }
+        return DIRR_OK;
+
     default:
 	return DIRR_UNKNOWN;
     }
@@ -2297,6 +2336,22 @@ static void obj_write_file(void)
         obj_commit(orp);
     }
     obj_emit(orp);
+
+    /*
+     * Write the ALIAS records (OMF record type 0xC6).
+     * Each record contains pairs of (alias_name, target_name)
+     * encoded as length-prefixed strings.
+     */
+    if (aliashead) {
+        orp->type = ALIASDEF;
+        orp->ori = ori_null;
+        for (struct AliasDef *a = aliashead; a; a = a->next) {
+            orp = obj_name(orp, a->aliasname);
+            orp = obj_name(orp, a->targetname);
+            obj_commit(orp);
+        }
+        obj_emit(orp);
+    }
 
     /*
      * Write a COMENT record stating that the linker's first pass
