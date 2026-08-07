@@ -2169,12 +2169,18 @@ static void obj_write_file(void)
         obj_emit2(orp);
     }
 
-    /* we're using extended OMF if we put in debug info */
-    if (debuginfo) {
+    /* we're using extended OMF if we put in debug info
+     * Note: wlink interprets class 0xA1 as CMT_MS_OMF and calls DoMSOMF(),
+     * which checks the data for "CV" or "HL" prefix. If neither is found,
+     * omfdbg is set to UNKNOWN and all LINNUM records are skipped.
+     * We omit this comment to keep wlink's default OMF_DBG_CODEVIEW. */
+    /*if (debuginfo) {
         orp->type = COMENT;
         obj_rword(orp, dEXTENDED);
+        obj_byte(orp, 'C');
+        obj_byte(orp, 'V');
         obj_emit2(orp);
-    }
+    }*/
 
     /*
      * Write the first LNAMES record, containing LNAME one, which
